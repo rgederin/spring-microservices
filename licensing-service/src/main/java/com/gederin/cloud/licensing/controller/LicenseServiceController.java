@@ -11,10 +11,12 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @RestController
 @RequestMapping("v1/licenses/")
 @RequiredArgsConstructor
+@Slf4j
 public class LicenseServiceController {
 
     private final LicenseService licenseService;
