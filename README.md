@@ -8,6 +8,7 @@
     * [Spring cloud config](#spring-cloud-config)
 - [Service Discovery](#service-discovery)
     * [Non-cloud service discovery](#non-cloud-service-discovery)
+    * [Service discovery in the cloud](#service-discovery-in-the-cloud)
 
 
 
@@ -74,7 +75,6 @@ An application needs to invoke a service located in another part of the organiza
 
 ![discovery](https://github.com/rgederin/spring-microservices/blob/master/img/service-discovery-traditional.png)
 
-
 The load balancer, upon receiving the request from the service consumer, locates the physical address entry in a routing table based on the path the user was trying to access. This routing table entry contains a list of one or more servers hosting the ser- vice. The load balancer then picks one of the servers in the list and forwards the request onto that server.
 
 Each instance of a service is deployed to one or more application servers. The number of these application servers was often static (for example, the number of application servers hosting a service didn’t go up and down) and persistent (for exam- ple, if a server running an application server crashed, it would be restored to the same state it was at the time of the crash, and would have the same IP and configuration that it had previously.)
@@ -87,3 +87,52 @@ While this type of model works well with applications running inside of the four
 2. *Limited horizontal scalability* — By centralizing your services into a single cluster of load balancers, you have limited ability to horizontally scale your load-balancing infrastructure across multiple servers. Many commercial load balancers are con- strained by two things: their redundancy model and licensing costs. Most com- mercial load balancers use a hot-swap model for redundancy so you only have a single server to handle the load, while the secondary load balancer is there only for fail-over in the case of an outage of the primary load balancer. You are, in essence, constrained by your hardware. Second, commercial load balancers also have restrictive licensing models geared toward a fixed capacity rather than a more variable model.
 3. *Statically managed* - Most traditional load balancers aren’t designed for rapid registration and de-registration of services. They use a centralized database to store the routes for rules and the only way to add new routes is often through the vendor’s proprietary API.
 4. *Complex* — Because a load balancer acts as a proxy to the services, service con- sumer requests have to have their requests mapped to the physical services. This translation layer often added a layer of complexity to your service infra- structure because the mapping rules for the service have to be defined and deployed by hand. In a traditional load balancer scenario, this registration of new service instances was done by hand and not at startup time of a new ser- vice instance.
+
+
+## Service discovery in the cloud
+
+The solution for a cloud-based microservice environment is to use a service-discovery mechanism that’s
+
+* *Highly available* — Service discovery needs to be able to support a “hot” cluster- ing environment where service lookups can be shared across multiple nodes in a service discovery cluster. If a node becomes unavailable, other nodes in the cluster should be able to take over.
+* *Peer-to-peer* — Each node in the service discovery cluster shares the state of a ser- vice instance.
+* *Load balanced* — Service discovery needs to dynamically load balance requests across all service instances to ensure that the service invocations are spread across all the service instances managed by it. In many ways, service discovery replaces the more static, manually managed load balancers used in many early web application implementations.
+* *Resilient* — The service discovery’s client should “cache” service information locally. Local caching allows for gradual degradation of the service discovery feature so that if service discovery service does become unavailable, applications can still function and locate the services based on the information main- tained in its local cache.
+* *Fault-tolerant* — Service discovery needs to detect when a service instance isn’t healthy and remove the instance from the list of available services that can take client requests. It should detect these faults with services and take action with- out human intervention.
+
+## The architecture of service discovery
+
+To begin our discussion around service discovery architecture, we need to understand four concepts. These general concepts are shared across all service discovery imple- mentations:
+
+* *Service registration* — How does a service register with the service discovery agent?
+* *Client lookup of service address* — What’s the means by which a service client looks up service information?
+* *Information sharing* — How is service information shared across nodes?
+* *Health monitoring* — How do services communicate their health back to the service discovery agent?
+
+
+Figure below shows the flow of these four bullets and what typically occurs in a service discovery pattern implementation.
+
+![discovery](https://github.com/rgederin/spring-microservices/blob/master/img/service-discovery-cloud-1.png)
+
+In figure above, one or more service discovery nodes have been started. These service discovery instances are usually unique and don’t have a load balancer that sits in front of them.
+
+As service instances start up, they’ll register their physical location, path, and port that they can be accessed by with one or more service discovery instances. While each instance of a service will have a unique IP address and port, each service instance that comes up will register under the same service ID. A service ID is nothing more than a key that uniquely identifies a group of the same service instances.
+
+A service will usually only register with one service discovery service instance. Most service discovery implementations use a peer-to-peer model of data propagation where the data around each service instance is communicated to all the other nodes in the cluster.
+
+Depending on the service discovery implementation, the propagation mechanism might use a hard-coded list of services to propagate to or use a multi-casting protocol like the “gossip” or “infection-style” protocol to allow other nodes to “discover” changes in the cluster.
+
+Finally, each service instance will push to or have pulled from its status by the service discovery service. Any services failing to return a good health check will be removed from the pool of available service instances.
+
+Once a service has registered with a service discovery service, it’s ready to be used by an application or service that needs to use its capabilities. Different models exist for a client to “discover” a service. A client can rely solely on the service discovery engine to resolve service locations each time a service is called. With this approach, the ser- vice discovery engine will be invoked every time a call to a registered microservice instance is made. Unfortunately, this approach is brittle because the service client is completely dependent on the service discovery engine to be running to find and invoke a service.
+
+### Client side load balancing
+
+A more robust approach is to use what’s called client-side load balancing.
+
+In this model, when a consuming actor needs to invoke a service
+
+1. It will contact the service discovery service for all the service instances a service consumer is asking for and then cache data locally on the service consumer’s machine.
+2. Each time a client wants to call the service, the service consumer will look up the location information for the service from the cache. Usually client-side caching will use a simple load balancing algorithm like the “round-robin” load balancing algorithm to ensure that service calls are spread across multiple service instances.
+3. The client will then periodically contact the service discovery service and refresh its cache of service instances. The client cache is eventually consistent, but there’s always a risk that between when the client contacts the service discovery instance for a refresh and calls are made, calls might be directed to a service instance that isn’t healthy. If, during the course of calling a service, the service call fails, the local service discovery cache is invalidated and the service discovery client will attempt to refresh its entries from the service discovery agent.
+
+![discovery](https://github.com/rgederin/spring-microservices/blob/master/img/service-discovery-cloud-2.png)
