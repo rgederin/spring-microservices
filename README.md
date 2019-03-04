@@ -1,5 +1,16 @@
 # spring-microservices
 
+# Table of Contents
+
+- [Configuration management](#configuration-management)
+    * [Configuration management architecture](#configuration-management-architecture)
+    * [Implementation choices](#implementation-choices)
+    * [Spring cloud config](#spring-cloud-config)
+- [Service Discovery](#service-discovery)
+    * [Non-cloud service discovery](#non-cloud-service-discovery)
+
+
+
 # Configuration management
 
 Managing application configuration is critical for microservices running in the cloud because microservice instances need to be launched quickly with minimal human intervention.
@@ -40,5 +51,19 @@ Spring Cloud Config provides server and client-side support for externalized con
 **Config Client features (for Spring applications):**
 
 * Bind to the Config Server and initialize Spring Environment with remote property sources
-8 Encrypt and decrypt property values (symmetric or asymmetric)
+* Encrypt and decrypt property values (symmetric or asymmetric)
 
+
+# Service Discovery
+
+In any distributed architecture, we need to find the physical address of where a machine is located. This concept has been around since the beginning of distrib- uted computing and is known formally as service discovery. Service discovery can be something as simple as maintaining a property file with the addresses of all the remote services used by an application, or something as formalized (and compli- cated) as a UDDI (Universal Description, Discovery, and Integration) repository.
+
+Service discovery is critical to microservice, cloud-based applications for two key reasons. First, it offers the application team the ability to quickly horizontally scale up and down the number of service instances running in an environment. The service consumers are abstracted away from the physical location of the service via service dis- covery. Because the service consumers don’t know the physical location of the actual service instances, new service instances can be added or removed from the pool of available services.
+
+This ability to quickly scale services without disrupting the service consumers is an extremely powerful concept, because it moves a development team used to building monolithic, single-tenant (for example, one customer) applications away from think- ing about scaling only in terms of adding bigger, better hardware (vertical scaling) to the more powerful approach to scaling by adding more servers (horizontal scaling).
+
+A monolithic approach usually drives development teams down the path of over- buying their capacity needs. Capacity increases come in clumps and spikes and are rarely a smooth steady path. Microservices allow us to scale up/down new service instances. Service discovery helps abstract that these deployments are occurring away from the service consumer.
+
+The second benefit of service discovery is that it helps increase application resil- iency. When a microservice instance becomes unhealthy or unavailable, most service discovery engines will remove that instance from its internal list of available services. The damage caused by a down service will be minimized because the service discovery engine will route services around the unavailable service.
+
+## Non-cloud service discovery
