@@ -9,6 +9,7 @@
 - [Service Discovery](#service-discovery)
     * [Non-cloud service discovery](#non-cloud-service-discovery)
     * [Service discovery in the cloud](#service-discovery-in-the-cloud)
+    * [Service discovery in action using Spring and Netflix Eureka and Ribbon](#service-discovery-in-action-using-spring-and-netflix-eureka-and-ribbon)
 
 
 
@@ -136,3 +137,19 @@ In this model, when a consuming actor needs to invoke a service
 3. The client will then periodically contact the service discovery service and refresh its cache of service instances. The client cache is eventually consistent, but there’s always a risk that between when the client contacts the service discovery instance for a refresh and calls are made, calls might be directed to a service instance that isn’t healthy. If, during the course of calling a service, the service call fails, the local service discovery cache is invalidated and the service discovery client will attempt to refresh its entries from the service discovery agent.
 
 ![discovery](https://github.com/rgederin/spring-microservices/blob/master/img/service-discovery-cloud-2.png)
+
+## Service discovery in action using Spring and Netflix Eureka and Ribbon
+
+Now you’re going to implement service discovery by setting up a service discovery agent and then registering two services with the agent. You’ll then have one service call another service by using the information retrieved by service discovery. Spring Cloud offers multiple methods for looking up information from a service discovery agent. We’ll also walk through the strengths and weakness of each approach.
+
+Once again, the Spring Cloud project makes this type of setup trivial to undertake. You’ll use Spring Cloud and Netflix’s Eureka service discovery engine to implement your service discovery pattern. For the client-side load balancing you’ll use Spring Cloud and Netflix’s Ribbon libraries.
+
+![discovery](https://github.com/rgederin/spring-microservices/blob/master/img/service-discovery-cloud-3.png)
+
+When the licensing service is invoked, it will call the organization service to retrieve the organization information associated with the designated organization ID. The actual resolution of the organization service’s location will be held in a service discovery registry. For this example, you’ll register two instances of the organization service with a service discovery registry and then use client-side load balancing to look up and cache the registry in each service instance. Figure 4.4 shows this arrangement:
+
+1. As the services are bootstrapping, the licensing and organization services will also register themselves with the Eureka Service. This registration process will tell Eureka the physical location and port number of each service instance along with a service ID for the service being started.
+2. When the licensing service calls to the organization service, it will use the Netflix Ribbon library to provide client-slide load balancing. Ribbon will contact the Eureka service to retrieve service location information and then cache it locally.
+3. Periodically, the Netflix Ribbon library will ping the Eureka service and refresh its local cache of service locations.
+
+Any new organization services instance will now be visible to the licensing service locally, while any non-healthy instances will be removed from the local cache
