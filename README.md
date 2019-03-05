@@ -10,7 +10,8 @@
     * [Non-cloud service discovery](#non-cloud-service-discovery)
     * [Service discovery in the cloud](#service-discovery-in-the-cloud)
     * [Service discovery in action using Spring and Netflix Eureka and Ribbon](#service-discovery-in-action-using-spring-and-netflix-eureka-and-ribbon)
-
+    * [Using service discovery to look up a service](#using-service-discovery-to-look-up-a-service)
+    * [Summary](#summary)
 
 
 # Configuration management
@@ -153,3 +154,171 @@ When the licensing service is invoked, it will call the organization service to 
 3. Periodically, the Netflix Ribbon library will ping the Eureka service and refresh its local cache of service locations.
 
 Any new organization services instance will now be visible to the licensing service locally, while any non-healthy instances will be removed from the local cache
+
+## Using service discovery to look up a service
+
+We now have the organization service registered with Eureka. You can also have the licensing service call the organization service without having direct knowledge of the location of any of the organization services. The licensing service will look up the physical location of the organization by using Eureka.
+
+For our purposes, we’re going to look at three different Spring/Netflix client libraries in which a service consumer can interact with Ribbon. These libraries will move from the lowest level of abstraction for interacting with Ribbon to the highest. The libraries we’ll explore include
+
+* Spring Discovery client
+* Spring Discovery client enabled RestTemplate  
+* Netflix Feign client
+
+
+### Looking up service instances with Spring DiscoveryClient
+
+The Spring DiscoveryClient offers the lowest level of access to Ribbon and the services registered within it. Using the DiscoveryClient, you can query for all the services registered with the ribbon client and their corresponding URLs.
+
+```
+@SpringBootApplication
+@EnableEurekaClient
+@EnableDiscoveryClient
+public class LicensingServiceApplication {
+	public static void main(String[] args) {
+		SpringApplication.run(LicensingServiceApplication.class, args);
+	}
+}
+
+@Component
+@RequiredArgsConstructor
+public class OrganizationDiscoveryClient {
+
+    private final DiscoveryClient discoveryClient;
+
+    public Optional<Organization> getOrganization(String organizationId) {
+        RestTemplate restTemplate = new RestTemplate();
+        List<ServiceInstance> instances = discoveryClient.getInstances("organizationservice");
+
+        if (instances.isEmpty()) {
+            return Optional.empty();
+        }
+
+        String serviceUri = String.format("%s/v1/organizations/%s", instances.get(0).getUri().toString(), organizationId);
+
+        ResponseEntity<Organization> restExchange =
+                restTemplate.exchange(
+                        serviceUri,
+                        HttpMethod.GET,
+                        null, Organization.class, organizationId);
+
+        return Optional.of(restExchange.getBody());
+    }
+}
+```
+
+The first item of interest in the code is the DiscoveryClient. This is the class you’ll use to interact with Ribbon. To retrieve all instances of the organization services regis- tered with Eureka, you can use the getInstances() method, passing in the key of service you’re looking for, to retrieve a list of ServiceInstance objects.
+
+The ServiceInstance class is used to hold information about a specific instance of a service including its hostname, port and URI.
+
+In code above, you take the first ServiceInstance class in your list to build a target URL that can then be used to call your service. Once you have a target URL, you can use a standard Spring RestTemplate to call your organization service and retrieve data.
+
+**The DiscoveryClient and real life**
+
+I’m walking through the DiscoveryClient to be completed in our discussion of building service consumers with Ribbon. The reality is that you should only use the Discovery- Client directly when your service needs to query Ribbon to understand what services and service instances are registered with it. There are several problems with this code including the following:
+
+You aren’t taking advantage of Ribbon’s client side load-balancing—By calling the Dis- coveryClient directly, you get back a list of services, but it becomes your responsibility to choose which service instances returned you’re going to invoke.
+
+You’re doing too much work—Right now, you have to build the URL that’s going to be used to call your service. It’s a small thing, but every piece of code that you can avoid writing is one less piece of code that you have to debug.
+
+Observant Spring developers might have noticed that you’re directly instantiating the RestTemplate class in the code. This is antithetical to normal Spring REST invoca- tions, as normally you’d have the Spring Framework inject the RestTemplate the class using it via the @Autowired annotation.
+
+You instantiated the RestTemplate class in listing 4.8 because once you’ve enabled the Spring DiscoveryClient in the application class via the @EnableDiscovery- Client annotation, all RestTemplates managed by the Spring framework will have a Ribbon-enabled interceptor injected into them that will change how URLs are cre- ated with the RestTemplate class. Directly instantiating the RestTemplate class allows you to avoid this behavior.
+
+In summary, there are better mechanisms for calling a Ribbon-backed service.
+
+### Invoking services with Ribbon-aware Spring RestTemplate
+
+Next, we’re going to see an example of how to use a RestTemplate that’s Ribbon- aware. This is one of the more common mechanisms for interacting with Ribbon via Spring. To use a Ribbon-aware RestTemplate class, you need to define a Rest- Template bean construction method with a Spring Cloud annotation called @Load- Balanced. 
+
+```
+@SpringBootApplication
+@EnableEurekaClient
+@EnableDiscoveryClient
+public class LicensingServiceApplication {
+
+	@LoadBalanced
+	@Bean
+	public RestTemplate getRestTemplate(){
+		return new RestTemplate();
+	}
+
+	public static void main(String[] args) {
+		SpringApplication.run(LicensingServiceApplication.class, args);
+	}
+}
+
+@Component
+@RequiredArgsConstructor
+public class OrganizationRestTemplateClient {
+
+    private final RestTemplate restTemplate;
+
+    public Organization getOrganization(String organizationId) {
+        ResponseEntity<Organization> restExchange =
+                restTemplate.exchange(
+                        "http://organizationservice/v1/organizations/{organizationId}",
+                        HttpMethod.GET,
+                        null, Organization.class, organizationId);
+
+        return restExchange.getBody();
+    }
+}
+```
+
+This code should look somewhat similar to the previous example, except for two key differences. First, the Spring Cloud DiscoveryClient is nowhere in sight. Second, the URL being used in the restTemplate.exchange() call should look odd to you:
+
+```
+restTemplate.exchange(
+  "http://organizationservice/v1/organizations/{organizationId}",
+   HttpMethod.GET,
+ null, Organization.class, organizationId);
+```
+ 
+The server name in the URL matches the application ID of the organizationservice key that you registered the organization service with in Eureka: http://{applicationid}/v1/organizations/{organizationId}
+
+The Ribbon-enabled RestTemplate will parse the URL passed into it and use what- ever is passed in as the server name as the key to query Ribbon for an instance of a ser- vice. The actual service location and port are completely abstracted from the developer.
+
+In addition, by using the RestTemplate class, Ribbon will round-robin load bal- ance all requests among all the service instances.
+
+### Invoking services with Netflix Feign client
+
+An alternative to the Spring Ribbon-enabled RestTemplate class is Netflix’s Feign client library. The Feign library takes a different approach to calling a REST service by having the developer first define a Java interface and then annotating that interface with Spring Cloud annotations to map what Eureka-based service Ribbon will invoke. The Spring Cloud framework will dynamically generate a proxy class that will be used to invoke the targeted REST service. There’s no code being written for calling the ser- vice other than an interface definition.
+
+```
+@SpringBootApplication
+@EnableEurekaClient
+@EnableFeignClients
+public class LicensingServiceApplication {
+	public static void main(String[] args) {
+		SpringApplication.run(LicensingServiceApplication.class, args);
+	}
+}
+
+@FeignClient("organizationservice")
+public interface OrganizationFeignClient {
+
+    @RequestMapping(
+            method= RequestMethod.GET,
+            value="/v1/organizations/{organizationId}",
+            consumes="application/json")
+    Organization getOrganization(@PathVariable("organizationId") String organizationId);
+}
+```
+
+You start the Feign example by using the @FeignClient annotation and passing it the name of the application id of the service you want the interface to represent. Next you’ll define a method, getOrganization(), in your interface that can be called by the client to invoke the organization service.
+
+How you define the getOrganization() method looks exactly like how you would expose an endpoint in a Spring Controller class. First, you’re going to define a @RequestMapping annotation for the getOrganization() method that will map the HTTP verb and endpoint that will be exposed on the organization service invocation. Second, you’ll map the organization ID passed in on the URL to an organizationId parameter on the method call, using the @PathVariable annota- tion. The return value from the call to the organization service will be automatically mapped to the Organization class that’s defined as the return value for the getOrganization() method.
+
+To use the OrganizationFeignClient class, all you need to do is autowire and use it. The Feign Client code will take care of all the coding work for you.
+
+## Summary
+
+* The service discovery pattern is used to abstract away the physical location of services.
+* A service discovery engine such as Eureka can seamlessly add and remove ser- vice instances from an environment without the service clients being impacted.
+* Client-side load balancing can provide an extra level of performance and resiliency by caching the physical location of a service on the client making the service call.
+* Eureka is a Netflix project that when used with Spring Cloud, is easy to set upand configure.
+* You used three different mechanisms in Spring Cloud, Netflix Eureka, and Netflix Ribbon to invoke a service. These mechanisms included
+    – Using a Spring Cloud service DiscoveryClient
+    – Using Spring Cloud and Ribbon-backed RestTemplate
+    – Using Spring Cloud and Netflix’s Feign client
