@@ -319,6 +319,6 @@ To use the OrganizationFeignClient class, all you need to do is autowire and use
 * Client-side load balancing can provide an extra level of performance and resiliency by caching the physical location of a service on the client making the service call.
 * Eureka is a Netflix project that when used with Spring Cloud, is easy to set upand configure.
 * You used three different mechanisms in Spring Cloud, Netflix Eureka, and Netflix Ribbon to invoke a service. These mechanisms included
-    – Using a Spring Cloud service DiscoveryClient
-    – Using Spring Cloud and Ribbon-backed RestTemplate
-    – Using Spring Cloud and Netflix’s Feign client
+    1. Using a Spring Cloud service DiscoveryClient
+    2. Using Spring Cloud and Ribbon-backed RestTemplate
+    3. Using Spring Cloud and Netflix’s Feign client
