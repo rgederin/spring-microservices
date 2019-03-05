@@ -12,7 +12,8 @@
     * [Service discovery in action using Spring and Netflix Eureka and Ribbon](#service-discovery-in-action-using-spring-and-netflix-eureka-and-ribbon)
     * [Using service discovery to look up a service](#using-service-discovery-to-look-up-a-service)
     * [Summary](#summary)
-
+- [Client resiliency patterns with Spring Cloud and Netflix Hystrix](#client-resiliency-patterns-with-spring-cloud-and-netflix-hystrix)
+    * [Client-side resiliency patterns](#client-side-resiliency-patterns)
 
 # Configuration management
 
@@ -322,3 +323,33 @@ To use the OrganizationFeignClient class, all you need to do is autowire and use
     1. Using a Spring Cloud service DiscoveryClient
     2. Using Spring Cloud and Ribbon-backed RestTemplate
     3. Using Spring Cloud and Netflix’s Feign client
+
+
+# Client resiliency patterns with Spring Cloud and Netflix Hystrix
+
+All systems, especially distributed systems, will experience failure. How we build our applications to respond to that failure is a critical part of every software developer’s job. However, when it comes to building resilient systems, most software engineers only take into account the complete failure of a piece of infrastructure or a key service. They focus on building redundancy into each layer of their application using techniques such as clustering key servers, load balancing between services, and segregation of infrastructure into multiple locations.
+
+While these approaches take into account the complete (and often spectacular) loss of a system component, they address only one small part of building resilient sys- tems. When a service crashes, it’s easy to detect that it’s no longer there, and the appli- cation can route around it. However, when a service is running slow, detecting that poor performance and routing around it is extremely difficult because
+
+1. **Degradation of a service can start out as intermittent and build momentum** — The degradation might occur only in small bursts. The first signs of failure might be a small group of users complaining about a problem, until suddenly the applica- tion container exhausts its thread pool and collapses completely.
+2. **Calls to remote services are usually synchronous and don’t cut short a long-running call** — The caller of a service has no concept of a timeout to keep the service call from hanging out forever. The application developer calls the service to per- form an action and waits for the service to return.
+3. **Applications are often designed to deal with complete failures of remote resources, not partial degradations.** Often, as long as the service has not completely failed, an application will continue to call the service and won’t fail fast. The application will continue to call the poorly behaving service. The calling application or service may degrade gracefully or, more likely, crash because of resource exhaustion. **Resource exhaustion** is when a limited resource such as a thread pool or database connection maxes out and the calling client must wait for that resource to become available.
+
+What’s insidious about problems caused by poorly performing remote services is that they’re not only difficult to detect, but can trigger a cascading effect that can ripple throughout an entire application ecosystem. Without safeguards in place, a single poorly performing service can quickly take down multiple applications. Cloud-based, microservice-based applications are particularly vulnerable to these types of outages because these applications are composed of a large number of fine-grained, distrib-uted services with different pieces of infrastructure involved in completing a user’s transaction.
+
+## Client-side resiliency patterns
+
+Client resiliency software patterns are focused on protecting a remote resource’s (another microservice call or database lookup) client from crashing when the remote resource is failing because that remote service is throwing errors or performing poorly. The goal of these patterns is to allow the client to “fail fast,” not consume valu- able resources such as database connections and thread pools, and prevent the prob- lem of the remote service from spreading “upstream” to consumers of the client.
+
+There are four client resiliency patterns:
+
+1. Client-side load balancing
+2. Circuit breakers
+3. Fallbacks
+4. Bulkheads
+
+![resiliency](https://github.com/rgederin/spring-microservices/blob/master/img/resiliency-1.png)
+
+Figure above demonstrates how these patterns sit between the microservice service consumer and the microservice.
+
+These patterns are implemented in the client calling the remote resource. The implementation of these patterns logically sit between the client consuming the remote resources and the resource itself.
