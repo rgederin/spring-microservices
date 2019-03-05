@@ -23,7 +23,7 @@ public class LicenseServiceController {
 
     @GetMapping("/")
     public String echo() {
-        return "echo";
+        return "licensingservice echo";
     }
 
     @GetMapping("/all")
@@ -32,12 +32,17 @@ public class LicenseServiceController {
     }
 
     @GetMapping("/{organizationId}")
-    public List<License> licensesByOrgId(@PathVariable String organizationId) {
+    public List<License> licensesByOrganisationId(@PathVariable String organizationId) {
         return licenseService.getLicensesByOrg(organizationId);
     }
 
     @GetMapping("license/{licenseId}")
     public License licenseById(@PathVariable String licenseId) {
         return licenseService.getLicense(licenseId);
+    }
+
+    @GetMapping("license/{licenseId}/{clientType}")
+    public License licenseByIdWithOrganizationInfo(@PathVariable String licenseId, @PathVariable String clientType) {
+        return licenseService.getLicenseWithOrganizationInfo(licenseId, clientType);
     }
 }
