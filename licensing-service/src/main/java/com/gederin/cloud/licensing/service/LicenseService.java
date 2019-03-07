@@ -61,16 +61,9 @@ public class LicenseService {
 
     @HystrixCommand(
             threadPoolKey = "licensesByOrgThreadPool",
-            threadPoolProperties =
-                    {@HystrixProperty(name = "coreSize", value = "30"),
-                            @HystrixProperty(name = "maxQueueSize", value = "10")},
-            commandProperties = {
-                    @HystrixProperty(name = "circuitBreaker.requestVolumeThreshold", value = "10"),
-                    @HystrixProperty(name = "circuitBreaker.errorThresholdPercentage", value = "75"),
-                    @HystrixProperty(name = "circuitBreaker.sleepWindowInMilliseconds", value = "7000"),
-                    @HystrixProperty(name = "metrics.rollingStats.timeInMilliseconds", value = "15000"),
-                    @HystrixProperty(name = "metrics.rollingStats.numBuckets", value = "5")}
-    )
+            threadPoolProperties = {
+                    @HystrixProperty(name = "coreSize", value = "30"),
+                    @HystrixProperty(name = "maxQueueSize", value = "10")})
     public List<License> getLicensesByOrg(String organizationId) {
         return licenseRepository.findByOrganizationId(organizationId);
     }

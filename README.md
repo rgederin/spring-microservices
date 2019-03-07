@@ -397,3 +397,156 @@ The key thing a circuit break patterns offers is the ability for remote calls to
 3. **Recover seamlessly** — With the circuit-breaker pattern acting as an intermediary, the circuit breaker can periodically check to see if the resource being requested is back on line and re-enable access to it without human intervention.
 
 In a large cloud-based application with hundreds of services, this graceful recovery is critical because it can significantly cut down on the amount of time needed to restore service and significantly lessen the risk of a tired operator or application engineer causing greater problems by having them intervene directly (restarting a failed ser- vice) in the restoration of the service.
+
+## Circuit breaker using Hystrix
+
+We’re going to look at implementing Hystrix in two broad categories. In the first cate- gory, you’re going to wrap all calls to your database in the licensing and organization service with a Hystrix circuit breaker. You’re then going to wrap the inter-service calls between the licensing service and the organization service using Hystrix. While these are two different categories calls, you’ll see that the use of Hystrix will be exactly the same. 
+
+Figure below shows what remote resources you’re going to wrap with a Hystrix circuit breaker.
+
+![resiliency](https://github.com/rgederin/spring-microservices/blob/master/img/resiliency-3.png)
+
+Let’s start our Hystrix discussion by showing how to wrap the retrieval of licensing service data from the licensing database using a synchronous Hystrix circuit breaker. With a synchronous call, the licensing service will retrieve its data but will wait for the SQL statement to complete or for a circuit-breaker time-out before continuing processing.
+
+Hystrix and Spring Cloud use the **@HystrixCommand** annotation to mark Java class methods as being managed by a Hystrix circuit breaker. When the Spring framework sees the @HystrixCommand, it will dynamically generate a proxy that will wrapper the method and manage all calls to that method through a thread pool of threads specifically set aside to handle remote calls.
+
+```
+    @HystrixCommand
+    public License getLicense(String licenseId) {
+        randomlyRunLong();
+
+        return licenseRepository.findById(licenseId).get();
+    }
+```
+
+This doesn’t look like a lot of code, and it’s not, but there is a lot of functionality inside this one annotation. With the use of the @HystrixCommand annotation, any time the getLicense method is called, the call will be wrapped with a Hys-trix circuit breaker. The circuit breaker will interrupt any call to the getLicenses method any time the call takes longer than 1,000 milliseconds.
+
+The beauty of using method-level annotations for tagging calls with circuit-breaker behavior is that it’s the same annotation whether you’re accessing a database or calling a microservice.
+
+Also we could override default timeout:
+
+```
+@HystrixCommand(commandProperties = @HystrixProperty(
+            name = "execution.isolation.thread.timeoutInMilliseconds",
+            value = "15000"))
+    public License getLicenseWithOrganizationInfo(String licenseId, String clientType) {
+        randomlyRunLong();
+
+        License license = licenseRepository.findById(licenseId).get();
+
+        Organization organization = retrieveOrgInfo(license.getOrganizationId(), clientType);
+
+        return license
+                .withOrganizationName(organization.getName())
+                .withContactName(organization.getContactName())
+                .withContactEmail(organization.getContactEmail())
+                .withContactPhone(organization.getContactPhone());
+    }
+```
+
+## Fallback processing using Hystrix
+
+Part of the beauty of the circuit breaker pattern is that because a “middle man” is between the consumer of a remote resource and the resource itself, you have an opportunity for the developer to intercept a service failure and choose an alternative course of action to take.
+
+In Hystrix, this is known as a fallback strategy and is easily implemented. Let’s see how to build a simple fallback strategy for your licensing database that simply returns a licensing object that says no licensing information is currently available. The following listing demonstrates this.
+
+```
+   @HystrixCommand(fallbackMethod = "buildFallbackLicense")
+    public License getLicense(String licenseId) {
+        randomlyRunLong();
+
+        return licenseRepository.findById(licenseId).get();
+    }
+    
+   private License buildFallbackLicense(String licenseId) {
+        return new License()
+                .withId(licenseId)
+                .withProductName("Sorry no licensing information currently available");
+    }    
+```
+
+To implement a fallback strategy with Hystrix you have to do two things. First, you need to add an attribute called fallbackMethod to the @HystrixCommand annota- tion. This attribute will contain the name of a method that will be called when Hystrix has to interrupt a call because it’s taking too long.
+
+The second thing you need to do is define a fallback method to be executed. This fallback method must reside in the same class as the original method that was protected by the @HystrixCommand. The fallback method must have the exact same method signature as the originating function as all of the parameters passed into the original method protected by the @HystrixCommand will be passed to the fallback.
+
+## Bulkhead pattern using Hystrix
+
+In a microservice-based application you’ll often need to call multiple microservices to complete a particular task. Without using a bulkhead pattern, the default behavior for these calls is that the calls are executed using the same threads that are reserved for handling requests for the entire Java container. In high volumes, performance problems with one service out of many can result in all of the threads for the Java container being maxed out and waiting to process work, while new requests for work back up. The Java container will eventually crash. The bulkhead pattern segregates remote resource calls in their own thread pools so that a single misbehaving service can be contained and not crash the container.
+
+Hystrix uses a thread pool to delegate all requests for remote services. By default, all Hystrix commands will share the same thread pool to process requests. This thread pool will have 10 threads in it to process remote service calls and those remote services calls could be anything, including REST-service invocations, database calls, and so on. Figure below illustrates this.
+
+![resiliency](https://github.com/rgederin/spring-microservices/blob/master/img/resiliency-4.png)
+
+
+This model works fine when you have a small number of remote resources being accessed within an application and the call volumes for the individual services are rel- atively evenly distributed. The problem is if you have services that have far higher volumes or longer completion times then other services, you can end up introducing thread exhaustion into your Hystrix thread pools because one service ends up dominating all of the threads in the default thread pool.
+
+Fortunately, Hystrix provides an easy-to-use mechanism for creating bulkheads between different remote resource calls. Figure 5.8 shows what Hystrix managed resources look like when they’re segregated into their own “bulkheads.”
+
+To implement segregated thread pools, you need to use additional attributes exposed through the @HystrixCommand annotation. Let’s look at some code that will
+
+1. Set up a separate thread pool for the getLicensesByOrg() call
+2. Set the number of threads in the thread pool
+3. Set the queue size for the number of requests that can queue if the individual threads are busy
+
+![resiliency](https://github.com/rgederin/spring-microservices/blob/master/img/resiliency-5.png)
+
+
+```
+@HystrixCommand(
+            threadPoolKey = "licensesByOrgThreadPool",
+            threadPoolProperties = {
+                    @HystrixProperty(name = "coreSize", value = "30"),
+                    @HystrixProperty(name = "maxQueueSize", value = "10")})
+    public List<License> getLicensesByOrg(String organizationId) {
+        return licenseRepository.findByOrganizationId(organizationId);
+    }
+```
+
+The first thing you should notice is that we’ve introduced a new attribute, thread- Poolkey, to your @HystrixCommand annotation. This signals to Hystrix that you want to set up a new thread pool. If you set no further values on the thread pool, Hystrix sets up a thread pool keyed off the name in the threadPoolKey attribute, but will use all default values for how the thread pool is configured.
+
+To customize your thread pool, you use the threadPoolProperties attribute on the @HystrixCommand. This attribute takes an array of HystrixProperty objects. These HystrixProperty objects can be used to control the behavior of the thread pool. You can set the size of the thread pool by using the coreSize attribute.
+
+You can also set up a queue in front of the thread pool that will control how many requests will be allowed to back up when the threads in the thread pool are busy. This queue size is set by the maxQueueSize attribute. Once the number of requests exceeds the queue size, any additional requests to the thread pool will fail until there is room in the queue.
+
+Note two things about the maxQueueSize attribute. First, if you set the value to -1, a Java SynchronousQueue will be used to hold all incoming requests. A synchronous queue will essentially enforce that you can never have more requests in process then the number of threads available in the thread pool. Setting the maxQueueSize to a value greater than one will cause Hystrix to use a Java LinkedBlockingQueue. The use of a LinkedBlockingQueue allows the developer to queue up requests even if all threads are busy processing requests.
+
+The second thing to note is that the maxQueueSize attribute can only be set when the thread pool is first initialized (for example, at startup of the application). Hystrix does allow you to dynamically change the size of the queue by using the queue- SizeRejectionThreshold attribute, but this attribute can only be set when the maxQueueSize attribute is a value greater than 0.
+
+## Hystrix dashboard
+
+Hystrix has own dashboard which allow monitoring of hystrix comand excution. 
+
+For this we need to add in pom.xml corresponding dependency:
+
+```
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-netflix-hystrix-dashboard</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+```
+
+Than add annotation **@EnableHystrixDashboard** to the application class.
+
+And finally we ned to add aditional setting to the application.yml
+
+```
+management:
+  endpoints:
+    web:
+      exposure:
+        include: hystrix.stream
+```
+
+After this you could go to hystrix dashboard in browser
+
+![resiliency](https://github.com/rgederin/spring-microservices/blob/master/img/resiliency-6.png)
+
+Enter hystrix stream value - *http://localhost:8080/actuator/hystrix.stream* and observe hystrix commands
+
+![resiliency](https://github.com/rgederin/spring-microservices/blob/master/img/resiliency-7.png)
+
+
