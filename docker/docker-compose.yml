@@ -11,6 +11,15 @@ services:
     environment:
       EUREKASERVER_URI: "http://eurekaserver:8761/eureka/"
       EUREKASERVER_PORT:   "8761"
+  zuulserver:
+    image: rgederin/zuul-service:dev
+    ports:
+      - "5555:5555"
+    environment:
+      PROFILE: "default"
+      SERVER_PORT: "5555"
+      EUREKASERVER_URI: "http://eurekaserver:8761/eureka/"
+      EUREKASERVER_PORT: "8761"
   licensingservice:
     image: rgederin/licensing-service:dev
     ports:
