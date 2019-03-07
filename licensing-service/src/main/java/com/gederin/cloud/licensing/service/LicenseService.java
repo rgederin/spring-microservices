@@ -7,10 +7,13 @@ import com.gederin.cloud.licensing.client.OrganizationRestTemplateClient;
 import com.gederin.cloud.licensing.model.License;
 import com.gederin.cloud.licensing.model.Organization;
 import com.gederin.cloud.licensing.repository.LicenseRepository;
+import com.netflix.hystrix.contrib.javanica.annotation.HystrixCommand;
+import com.netflix.hystrix.contrib.javanica.annotation.HystrixProperty;
 
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Random;
 
 import lombok.RequiredArgsConstructor;
 
@@ -25,15 +28,26 @@ public class LicenseService {
 
     private final OrganizationFeignClient feignClient;
 
+    @HystrixCommand
     public List<License> getAllLicenses() {
+        randomlyRunLong();
+
         return (List<License>) licenseRepository.findAll();
     }
 
+    @HystrixCommand(fallbackMethod = "buildFallbackLicense")
     public License getLicense(String licenseId) {
+        randomlyRunLong();
+
         return licenseRepository.findById(licenseId).get();
     }
 
+    @HystrixCommand(commandProperties = @HystrixProperty(
+            name = "execution.isolation.thread.timeoutInMilliseconds",
+            value = "15000"))
     public License getLicenseWithOrganizationInfo(String licenseId, String clientType) {
+        randomlyRunLong();
+
         License license = licenseRepository.findById(licenseId).get();
 
         Organization organization = retrieveOrgInfo(license.getOrganizationId(), clientType);
@@ -45,6 +59,18 @@ public class LicenseService {
                 .withContactPhone(organization.getContactPhone());
     }
 
+    @HystrixCommand(
+            threadPoolKey = "licensesByOrgThreadPool",
+            threadPoolProperties =
+                    {@HystrixProperty(name = "coreSize", value = "30"),
+                            @HystrixProperty(name = "maxQueueSize", value = "10")},
+            commandProperties = {
+                    @HystrixProperty(name = "circuitBreaker.requestVolumeThreshold", value = "10"),
+                    @HystrixProperty(name = "circuitBreaker.errorThresholdPercentage", value = "75"),
+                    @HystrixProperty(name = "circuitBreaker.sleepWindowInMilliseconds", value = "7000"),
+                    @HystrixProperty(name = "metrics.rollingStats.timeInMilliseconds", value = "15000"),
+                    @HystrixProperty(name = "metrics.rollingStats.numBuckets", value = "5")}
+    )
     public List<License> getLicensesByOrg(String organizationId) {
         return licenseRepository.findByOrganizationId(organizationId);
     }
@@ -71,5 +97,27 @@ public class LicenseService {
         }
 
         return organization;
+    }
+
+    private License buildFallbackLicense(String licenseId) {
+        return new License()
+                .withId(licenseId)
+                .withProductName("Sorry no licensing information currently available");
+    }
+
+    private void randomlyRunLong() {
+        Random rand = new Random();
+
+        int randomNum = rand.nextInt(3 - 1 + 1) + 1;
+
+        if (randomNum == 3) sleep();
+    }
+
+    private void sleep() {
+        try {
+            Thread.sleep(11000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 }

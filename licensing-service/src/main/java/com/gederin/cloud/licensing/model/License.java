@@ -46,6 +46,11 @@ public class License {
     @Transient
     private String contactEmail = "";
 
+    public License withId(String licenseId){
+        this.setLicenseId(licenseId);
+        return this;
+    }
+
     public License withOrganizationId(String organizationId){
         this.setOrganizationId(organizationId);
         return this;

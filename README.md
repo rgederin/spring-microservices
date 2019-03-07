@@ -376,3 +376,24 @@ With the fallback pattern, when a remote service call fails, rather than generat
 
 For instance, suppose you have an e-commerce site that monitors your user’s behavior and tries to give them recommendations of other items they could buy. Typi- cally, you might call a microservice to run an analysis of the user’s past behavior and return a list of recommendations tailored to that specific user. However, if the preference service fails, your fallback might be to retrieve a more general list of preferences that’s based off all user purchases and is much more generalized. This data might come from a completely different service and data source.
 
+### How these patterns could help in real life
+
+![resiliency](https://github.com/rgederin/spring-microservices/blob/master/img/resiliency-2.png)
+
+If enough errors on the service have occurred within a certain time period, the cir- cuit breaker will now “trip” the circuit and all calls to Service C will fail without calling Service C.
+
+This tripping of the circuit allows three things to occur:
+
+1. Service B now immediately knows there’s a problem without having to wait for a timeout from the circuit breaker.
+2. Service B can now choose to either completely fail or take action using an alter- native set of code (a fallback).
+3. Service C will be given an opportunity to recover because Service B isn’t calling it while the circuit breaker has been tripped. This allows Service C to have breathing room and helps prevent the cascading death that occurs when a ser- vice degradation occurs.
+
+Finally, the circuit breaker will occasionally let calls through to a degraded service, and if those calls succeed enough times in a row, the circuit breaker will reset itself.
+
+The key thing a circuit break patterns offers is the ability for remote calls to
+
+1. **Fail fast** — When a remote service is experiencing a degradation, the application will fail fast and prevent resource exhaustion issues that normally shut down the entire application. In most outage situations, it’s better to be partially down rather than completely down.
+2. **Fail gracefully** — By timing out and failing fast, the circuit breaker pattern gives the application developer the ability to fail gracefully or seek alternative mecha- nisms to carry out the user’s intent. For instance, if a user is trying to retrieve data from one data source, and that data source is experiencing a service degra- dation, then the application developer could try to retrieve that data from another location.
+3. **Recover seamlessly** — With the circuit-breaker pattern acting as an intermediary, the circuit breaker can periodically check to see if the resource being requested is back on line and re-enable access to it without human intervention.
+
+In a large cloud-based application with hundreds of services, this graceful recovery is critical because it can significantly cut down on the amount of time needed to restore service and significantly lessen the risk of a tired operator or application engineer causing greater problems by having them intervene directly (restarting a failed ser- vice) in the restoration of the service.
