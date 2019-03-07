@@ -14,6 +14,11 @@
     * [Summary](#summary)
 - [Client resiliency patterns with Spring Cloud and Netflix Hystrix](#client-resiliency-patterns-with-spring-cloud-and-netflix-hystrix)
     * [Client-side resiliency patterns](#client-side-resiliency-patterns)
+    * [Circuit breaker using Hystrix](#circuit-breaker-using-hystrix)
+    * [Fallback processing using Hystrix](#fallback-processing-using-hystrix)
+    * [Bulkhead pattern using Hystrix](##bulkhead-pattern-using-hystrix)
+    * [Hystrix dashboard](#hystrix-dashboard)
+    * [Summary](#summary)
 
 # Configuration management
 
@@ -549,4 +554,14 @@ Enter hystrix stream value - *http://localhost:8080/actuator/hystrix.stream* and
 
 ![resiliency](https://github.com/rgederin/spring-microservices/blob/master/img/resiliency-7.png)
 
+## Summary
 
+* When designing highly distributed applications such as a microservice-based application, client resiliency must be taken into account.
+* Outright failures of a service (for example, the server crashes) are easy to detect and deal with.
+* A single poorly performing service can trigger a cascading effect of resource exhaustion as threads in the calling client are blocked waiting for a service to complete.
+* Three core client resiliency patterns are the circuit-breaker pattern, the fallback pattern, and the bulkhead pattern.
+* The circuit breaker pattern seeks to kill slow-running and degraded system calls so that the calls fail fast and prevent resource exhaustion.
+* The fallback pattern allows you as the developer to define alternative code paths in the event that a remote service call fails or the circuit breaker for the call fails.
+* The bulk head pattern segregates remote resource calls away from each other, isolating calls to a remote service into their own thread pool. If one set of ser- vice calls is failing, its failures shouldn’t be allowed to eat up all the resources in the application container.
+* Spring Cloud and the Netflix Hystrix libraries provide implementations for the circuit breaker, fallback, and bulkhead patterns.
+* The Hystrix libraries are highly configurable and can be set at global, class, and thread pool levels.
