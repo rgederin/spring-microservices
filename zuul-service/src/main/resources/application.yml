@@ -34,3 +34,11 @@ hystrix:
 licensingservice:
   ribbon:
     ReadTimeout: 15000
+
+
+#Setting logging levels
+logging:
+  level:
+    com.netflix: WARN
+    org.springframework.web: WARN
+    com.gederin: DEBUG
